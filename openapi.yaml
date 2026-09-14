@@ -1,0 +1,1430 @@
+openapi: 3.0.3
+info:
+  title: Deskward
+  version: 0.1.0
+  description: >-
+    HR service-delivery control tower. Deskward captures employee and manager demand from
+    every channel into one case record, classifies sensitivity at intake to protect
+    grievance, whistleblowing and accommodation cases from automation, serves answers from
+    jurisdiction-versioned content under quality gates, aggregates recurring case classes
+    into a costed friction register with owners outside HR, and re-plans HR capacity from
+    transactional toward advisory work.
+  x-product-slug: ai-hr-deskward
+  x-source: ai-in-hr/Deloitte_HR-Essential-role/
+servers:
+  - url: https://api.example.com
+tags:
+  - name: Intake
+    description: Multi-channel demand capture and sensitivity classification
+  - name: Cases
+    description: Tiered case handling, escalation, resolution and reopening
+  - name: Knowledge
+    description: Jurisdiction-versioned answer content and ownership
+  - name: AutomationQuality
+    description: Automated response events and deflection quality gates
+  - name: FrictionRegister
+    description: Recurring case classes, owners, decisions and verification
+  - name: ReturnedHours
+    description: Employee hours returned through resolved friction
+  - name: HRCapacity
+    description: Tier capacity, advisory share targets and operating model planning
+  - name: Governance
+    description: Consultation, transparency, retention and contingent worker scope
+  - name: Reporting
+    description: Service performance and the quarterly productivity statement
+paths:
+  /v1/cases:
+    post:
+      operationId: createServiceCase
+      tags: [Intake]
+      security:
+        - BearerAuth: []
+        - ApiKeyAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ServiceCaseCreate"
+      responses:
+        "201":
+          description: Case created and classified for sensitivity
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/DataEnvelopeServiceCase"
+        "422":
+          $ref: "#/components/responses/UnprocessableEntity"
+    get:
+      operationId: listServiceCases
+      tags: [Cases]
+      security:
+        - BearerAuth: []
+      parameters:
+        - $ref: "#/components/parameters/Cursor"
+        - $ref: "#/components/parameters/Limit"
+        - name: categoryCode
+          in: query
+          schema:
+            type: string
+        - name: status
+          in: query
+          schema:
+            type: string
+            enum: [new, assigned, awaiting_employee, resolved, reopened, closed]
+        - name: view
+          in: query
+          description: Manager views never include protected sensitivity classes
+          schema:
+            type: string
+            enum: [my_cases, my_team, my_queue, specialist_queue]
+      responses:
+        "200":
+          description: Cases page filtered by caller scope and sensitivity
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ListEnvelopeServiceCase"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+  /v1/cases/{caseId}/sensitivity:
+    parameters:
+      - $ref: "#/components/parameters/CaseId"
+    put:
+      operationId: reclassifyCaseSensitivity
+      tags: [Intake]
+      security:
+        - BearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/SensitivityReclassification"
+      responses:
+        "200":
+          description: Sensitivity reclassified, routing visibility and retention updated
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/DataEnvelopeServiceCase"
+        "403":
+          description: Caller not authorised to reclassify into a protected class
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Problem"
+  /v1/cases/{caseId}/assignment:
+    parameters:
+      - $ref: "#/components/parameters/CaseId"
+    post:
+      operationId: assignCase
+      tags: [Cases]
+      security:
+        - BearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CaseAssignmentRequest"
+      responses:
+        "200":
+          description: Case assigned to a tier or specialist queue
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/DataEnvelopeServiceCase"
+        "403":
+          description: Target handler is not authorised for this sensitivity class
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Problem"
+  /v1/cases/{caseId}/resolution:
+    parameters:
+      - $ref: "#/components/parameters/CaseId"
+    post:
+      operationId: resolveCase
+      tags: [Cases]
+      security:
+        - BearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CaseResolution"
+      responses:
+        "200":
+          description: Case resolved with outcome and answer provenance
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/DataEnvelopeServiceCase"
+  /v1/cases/{caseId}/reopen:
+    parameters:
+      - $ref: "#/components/parameters/CaseId"
+    post:
+      operationId: reopenCase
+      tags: [Cases]
+      security:
+        - BearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [reason]
+              properties:
+                reason:
+                  type: string
+                  enum: [answer_wrong, answer_incomplete, problem_recurred, wrong_jurisdiction, not_actioned]
+                note:
+                  type: string
+      responses:
+        "200":
+          description: Case reopened and counted against the category quality gate
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/DataEnvelopeServiceCase"
+  /v1/knowledge-articles:
+    get:
+      operationId: listKnowledgeArticles
+      tags: [Knowledge]
+      security:
+        - BearerAuth: []
+      parameters:
+        - $ref: "#/components/parameters/Cursor"
+        - $ref: "#/components/parameters/Limit"
+        - name: jurisdiction
+          in: query
+          schema:
+            type: string
+        - name: state
+          in: query
+          schema:
+            type: string
+            enum: [draft, published, review_due, withheld, retired]
+      responses:
+        "200":
+          description: Knowledge articles page with jurisdiction and review state
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ListEnvelopeKnowledgeArticle"
+    post:
+      operationId: publishKnowledgeArticle
+      tags: [Knowledge]
+      security:
+        - BearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/KnowledgeArticleUpsert"
+      responses:
+        "201":
+          description: Article published with owner and review date
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/DataEnvelopeKnowledgeArticle"
+  /v1/knowledge-articles/{articleId}/withhold:
+    parameters:
+      - $ref: "#/components/parameters/ArticleId"
+    post:
+      operationId: withholdKnowledgeArticle
+      tags: [Knowledge]
+      security:
+        - BearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [reason]
+              properties:
+                reason:
+                  type: string
+                  enum: [out_of_date, legally_incorrect, jurisdiction_change, adviser_flagged]
+                flaggedByRef:
+                  type: string
+      responses:
+        "200":
+          description: Article withheld from service rather than served with a disclaimer
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/DataEnvelopeKnowledgeArticle"
+  /v1/automated-responses:
+    post:
+      operationId: recordAutomatedResponse
+      tags: [AutomationQuality]
+      security:
+        - ApiKeyAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/AutomatedResponseEventCreate"
+      responses:
+        "201":
+          description: Automated response recorded against the case and article
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/DataEnvelopeAutomatedResponseEvent"
+        "409":
+          description: Category is not eligible for automated response
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Problem"
+  /v1/categories/{categoryCode}/quality-gate:
+    parameters:
+      - $ref: "#/components/parameters/CategoryCode"
+    get:
+      operationId: getCategoryQualityGate
+      tags: [AutomationQuality]
+      security:
+        - BearerAuth: []
+      responses:
+        "200":
+          description: Reopen, escalation and satisfaction rates against thresholds
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/DataEnvelopeQualityGate"
+    post:
+      operationId: withdrawAutomationForCategory
+      tags: [AutomationQuality]
+      security:
+        - BearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [reason]
+              properties:
+                reason:
+                  type: string
+                  enum: [reopen_threshold_breached, escalation_threshold_breached, satisfaction_threshold_breached, content_withheld, manual_decision]
+                narrative:
+                  type: string
+      responses:
+        "202":
+          description: Automated handling withdrawn for the category
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/DataEnvelopeQualityGate"
+  /v1/friction-items:
+    get:
+      operationId: listFrictionItems
+      tags: [FrictionRegister]
+      security:
+        - BearerAuth: []
+      parameters:
+        - $ref: "#/components/parameters/Cursor"
+        - $ref: "#/components/parameters/Limit"
+        - name: decision
+          in: query
+          schema:
+            type: string
+            enum: [undecided, fix, absorb, accept]
+        - name: ownerFunction
+          in: query
+          schema:
+            type: string
+      responses:
+        "200":
+          description: Friction register page with hour cost and owners
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ListEnvelopeFrictionItem"
+    post:
+      operationId: raiseFrictionItem
+      tags: [FrictionRegister]
+      security:
+        - BearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/FrictionItemCreate"
+      responses:
+        "201":
+          description: Friction item raised from aggregated case classes
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/DataEnvelopeFrictionItem"
+  /v1/friction-items/{frictionItemId}/decision:
+    parameters:
+      - $ref: "#/components/parameters/FrictionItemId"
+    post:
+      operationId: decideFrictionItem
+      tags: [FrictionRegister]
+      security:
+        - BearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/FrictionDecision"
+      responses:
+        "200":
+          description: Decision recorded with named owner and target date
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/DataEnvelopeFrictionItem"
+  /v1/friction-items/{frictionItemId}/verification:
+    parameters:
+      - $ref: "#/components/parameters/FrictionItemId"
+    post:
+      operationId: verifyFrictionFix
+      tags: [FrictionRegister]
+      security:
+        - BearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [postFixCaseVolume, measurementWeeks]
+              properties:
+                postFixCaseVolume:
+                  type: integer
+                measurementWeeks:
+                  type: integer
+                verifiedByRef:
+                  type: string
+      responses:
+        "200":
+          description: Post-fix case volume measured and returned hours confirmed
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/DataEnvelopeReturnedHoursRecord"
+  /v1/returned-hours:
+    get:
+      operationId: listReturnedHours
+      tags: [ReturnedHours]
+      security:
+        - BearerAuth: []
+      parameters:
+        - $ref: "#/components/parameters/Cursor"
+        - $ref: "#/components/parameters/Limit"
+        - name: period
+          in: query
+          schema:
+            type: string
+            example: 2026-Q3
+        - name: state
+          in: query
+          schema:
+            type: string
+            enum: [estimated, confirmed, withdrawn]
+      responses:
+        "200":
+          description: Returned employee hours records page
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ListEnvelopeReturnedHoursRecord"
+  /v1/capacity-plans:
+    post:
+      operationId: publishCapacityPlan
+      tags: [HRCapacity]
+      security:
+        - BearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/HRCapacityPlanCreate"
+      responses:
+        "201":
+          description: Capacity plan published with advisory share target
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/DataEnvelopeHRCapacityPlan"
+    get:
+      operationId: getCurrentCapacityPlan
+      tags: [HRCapacity]
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: period
+          in: query
+          schema:
+            type: string
+      responses:
+        "200":
+          description: Tier demand, effort and advisory share against target
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/DataEnvelopeHRCapacityPlan"
+  /v1/consultation-records:
+    post:
+      operationId: raiseConsultationRecord
+      tags: [Governance]
+      security:
+        - BearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ConsultationRecordCreate"
+      responses:
+        "201":
+          description: Consultation obligation raised, blocking automation go-live
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/DataEnvelopeConsultationRecord"
+  /v1/contingent-scopes:
+    put:
+      operationId: setContingentServiceScope
+      tags: [Governance]
+      security:
+        - BearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ContingentServiceScope"
+      responses:
+        "200":
+          description: Service scope for contingent workers recorded
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/DataEnvelopeContingentServiceScope"
+  /v1/reports/service-performance:
+    get:
+      operationId: getServicePerformance
+      tags: [Reporting]
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: period
+          in: query
+          schema:
+            type: string
+      responses:
+        "200":
+          description: Demand, resolution, deflection quality and cost per employee
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/DataEnvelopeServicePerformance"
+  /v1/reports/productivity-statement:
+    get:
+      operationId: getProductivityStatement
+      tags: [Reporting]
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: period
+          in: query
+          schema:
+            type: string
+      responses:
+        "200":
+          description: Quarterly statement of returned hours, friction closed and capacity shift
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/DataEnvelopeProductivityStatement"
+components:
+  securitySchemes:
+    ApiKeyAuth:
+      type: apiKey
+      in: header
+      name: X-API-Key
+    BearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+  parameters:
+    Cursor:
+      name: cursor
+      in: query
+      schema:
+        type: string
+    Limit:
+      name: limit
+      in: query
+      schema:
+        type: integer
+        minimum: 1
+        maximum: 200
+        default: 50
+    CaseId:
+      name: caseId
+      in: path
+      required: true
+      schema:
+        type: string
+    ArticleId:
+      name: articleId
+      in: path
+      required: true
+      schema:
+        type: string
+    CategoryCode:
+      name: categoryCode
+      in: path
+      required: true
+      schema:
+        type: string
+    FrictionItemId:
+      name: frictionItemId
+      in: path
+      required: true
+      schema:
+        type: string
+  responses:
+    Unauthorized:
+      description: Missing or invalid credentials
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/Problem"
+    NotFound:
+      description: Resource not found
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/Problem"
+    UnprocessableEntity:
+      description: Validation failed
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/Problem"
+  schemas:
+    ResponseMeta:
+      type: object
+      required: [requestId, timestamp]
+      properties:
+        requestId:
+          type: string
+        timestamp:
+          type: string
+          format: date-time
+    Problem:
+      type: object
+      required: [type, title, status]
+      properties:
+        type:
+          type: string
+          format: uri
+        title:
+          type: string
+        status:
+          type: integer
+        detail:
+          type: string
+    Money:
+      type: object
+      required: [amount, currency]
+      properties:
+        amount:
+          type: number
+          format: double
+        currency:
+          type: string
+          example: EUR
+    Hours:
+      type: object
+      required: [value, basis]
+      properties:
+        value:
+          type: number
+          format: double
+        basis:
+          type: string
+          enum: [per_case, per_quarter_total, per_employee_per_year]
+    SensitivityClass:
+      type: string
+      enum: [general, personal_data, health_or_accommodation, grievance, whistleblowing, harassment, investigation]
+    EmployeeContext:
+      type: object
+      required: [employeeRef, jurisdiction]
+      properties:
+        employeeRef:
+          type: string
+        jurisdiction:
+          type: string
+        contractType:
+          type: string
+          enum: [permanent, fixed_term, part_time, apprentice, contingent, third_party]
+        managerRef:
+          type: string
+        businessUnit:
+          type: string
+        language:
+          type: string
+        accessibilityNeeds:
+          type: array
+          items:
+            type: string
+    CaseCategory:
+      type: object
+      required: [code, name, automationEligible, defaultSensitivity]
+      properties:
+        code:
+          type: string
+          example: pay_query_underpayment
+        name:
+          type: string
+        tierTarget:
+          type: string
+          enum: [self_service, automated, tier_one, tier_two, specialist]
+        automationEligible:
+          type: boolean
+        defaultSensitivity:
+          $ref: "#/components/schemas/SensitivityClass"
+        serviceStandardHours:
+          type: integer
+        estimatedEmployeeMinutesPerCase:
+          type: number
+          format: float
+    ServiceCase:
+      type: object
+      required: [id, categoryCode, channel, sensitivity, status, createdAt]
+      properties:
+        id:
+          type: string
+        categoryCode:
+          type: string
+        channel:
+          type: string
+          enum: [portal, assistant, email, telephone, collaboration_tool, business_partner_logged, walk_in]
+        sensitivity:
+          $ref: "#/components/schemas/SensitivityClass"
+        status:
+          type: string
+          enum: [new, assigned, awaiting_employee, resolved, reopened, closed]
+        createdAt:
+          type: string
+          format: date-time
+        context:
+          $ref: "#/components/schemas/EmployeeContext"
+        assignedToRef:
+          type: string
+        tier:
+          type: string
+          enum: [automated, tier_one, tier_two, specialist]
+        serviceStandardDueAt:
+          type: string
+          format: date-time
+        resolvedAt:
+          type: string
+          format: date-time
+        reopenCount:
+          type: integer
+        managerVisible:
+          type: boolean
+        automationExcluded:
+          type: boolean
+        contingentWorker:
+          type: boolean
+        retentionScheduleCode:
+          type: string
+    ServiceCaseCreate:
+      type: object
+      required: [categoryCode, channel, context, summary]
+      properties:
+        categoryCode:
+          type: string
+        channel:
+          type: string
+          enum: [portal, assistant, email, telephone, collaboration_tool, business_partner_logged, walk_in]
+        context:
+          $ref: "#/components/schemas/EmployeeContext"
+        summary:
+          type: string
+        declaredSensitivity:
+          $ref: "#/components/schemas/SensitivityClass"
+        loggedOnBehalfByRef:
+          type: string
+          description: Used when an HR business partner logs informal demand
+    SensitivityReclassification:
+      type: object
+      required: [sensitivity, reason]
+      properties:
+        sensitivity:
+          $ref: "#/components/schemas/SensitivityClass"
+        reason:
+          type: string
+        reclassifiedByRef:
+          type: string
+    CaseAssignmentRequest:
+      type: object
+      required: [tier]
+      properties:
+        tier:
+          type: string
+          enum: [automated, tier_one, tier_two, specialist]
+        assignToRef:
+          type: string
+        reason:
+          type: string
+    CaseResolution:
+      type: object
+      required: [outcome]
+      properties:
+        outcome:
+          type: string
+          enum: [answered, transaction_completed, referred_out, withdrawn_by_employee, no_action_required]
+        answerArticleId:
+          type: string
+        answerArticleVersion:
+          type: integer
+        transactionReference:
+          type: string
+        satisfactionScore:
+          type: integer
+          minimum: 1
+          maximum: 5
+        resolvedByRef:
+          type: string
+    KnowledgeArticle:
+      type: object
+      required: [id, title, jurisdiction, state, version, ownerRef]
+      properties:
+        id:
+          type: string
+        title:
+          type: string
+        jurisdiction:
+          type: string
+        appliesToContractTypes:
+          type: array
+          items:
+            type: string
+        state:
+          type: string
+          enum: [draft, published, review_due, withheld, retired]
+        version:
+          type: integer
+        ownerRef:
+          type: string
+        legalConsequence:
+          type: boolean
+          description: Whether an incorrect answer creates statutory exposure
+        reviewDueOn:
+          type: string
+          format: date
+        languages:
+          type: array
+          items:
+            type: string
+        automationApproved:
+          type: boolean
+    KnowledgeArticleUpsert:
+      type: object
+      required: [title, jurisdiction, ownerRef, body, reviewDueOn]
+      properties:
+        title:
+          type: string
+        jurisdiction:
+          type: string
+        appliesToContractTypes:
+          type: array
+          items:
+            type: string
+        ownerRef:
+          type: string
+        body:
+          type: string
+        legalConsequence:
+          type: boolean
+        reviewDueOn:
+          type: string
+          format: date
+        automationApproved:
+          type: boolean
+    AutomatedResponseEventCreate:
+      type: object
+      required: [caseId, articleId, articleVersion]
+      properties:
+        caseId:
+          type: string
+        articleId:
+          type: string
+        articleVersion:
+          type: integer
+        confidence:
+          type: number
+          format: float
+        employeeAccepted:
+          type: boolean
+    AutomatedResponseEvent:
+      type: object
+      required: [id, caseId, articleId, servedAt, outcome]
+      properties:
+        id:
+          type: string
+        caseId:
+          type: string
+        articleId:
+          type: string
+        articleVersion:
+          type: integer
+        servedAt:
+          type: string
+          format: date-time
+        confidence:
+          type: number
+          format: float
+        outcome:
+          type: string
+          enum: [accepted, rejected, escalated, abandoned]
+    QualityGate:
+      type: object
+      required: [categoryCode, period, automationState]
+      properties:
+        categoryCode:
+          type: string
+        period:
+          type: string
+        automationState:
+          type: string
+          enum: [active, withdrawn, never_eligible]
+        reopenRate:
+          type: number
+          format: float
+        reopenThreshold:
+          type: number
+          format: float
+        escalationRate:
+          type: number
+          format: float
+        escalationThreshold:
+          type: number
+          format: float
+        satisfactionMean:
+          type: number
+          format: float
+        satisfactionThreshold:
+          type: number
+          format: float
+        breached:
+          type: boolean
+        withdrawnReason:
+          type: string
+    FrictionSignal:
+      type: object
+      required: [source, strength]
+      properties:
+        source:
+          type: string
+          enum: [case_volume, reopen_pattern, adviser_flag, manager_report, pulse_survey, exit_interview]
+        strength:
+          type: string
+          enum: [weak, moderate, strong]
+        detail:
+          type: string
+    FrictionItem:
+      type: object
+      required: [id, title, caseClasses, quarterlyCaseVolume, decision]
+      properties:
+        id:
+          type: string
+        title:
+          type: string
+        caseClasses:
+          type: array
+          items:
+            type: string
+        quarterlyCaseVolume:
+          type: integer
+        estimatedEmployeeHours:
+          $ref: "#/components/schemas/Hours"
+        estimatedAnnualCost:
+          $ref: "#/components/schemas/Money"
+        rootCauseFunction:
+          type: string
+          example: payroll_operations
+        ownerRef:
+          type: string
+        ownerFunction:
+          type: string
+        decision:
+          type: string
+          enum: [undecided, fix, absorb, accept]
+        targetDate:
+          type: string
+          format: date
+        signals:
+          type: array
+          items:
+            $ref: "#/components/schemas/FrictionSignal"
+        verificationState:
+          type: string
+          enum: [not_applicable, awaiting_fix, measuring, verified, not_verified]
+    FrictionItemCreate:
+      type: object
+      required: [title, caseClasses, quarterlyCaseVolume]
+      properties:
+        title:
+          type: string
+        caseClasses:
+          type: array
+          items:
+            type: string
+        quarterlyCaseVolume:
+          type: integer
+        estimatedEmployeeHours:
+          $ref: "#/components/schemas/Hours"
+        rootCauseFunction:
+          type: string
+        signals:
+          type: array
+          items:
+            $ref: "#/components/schemas/FrictionSignal"
+    FrictionDecision:
+      type: object
+      required: [decision, ownerRef, ownerFunction]
+      properties:
+        decision:
+          type: string
+          enum: [fix, absorb, accept]
+        ownerRef:
+          type: string
+        ownerFunction:
+          type: string
+        targetDate:
+          type: string
+          format: date
+        rationale:
+          type: string
+        initiativeReference:
+          type: string
+          description: Backlog reference in the owning function's own tool
+    ReturnedHoursRecord:
+      type: object
+      required: [id, frictionItemId, period, hours, state]
+      properties:
+        id:
+          type: string
+        frictionItemId:
+          type: string
+        period:
+          type: string
+        hours:
+          $ref: "#/components/schemas/Hours"
+        state:
+          type: string
+          enum: [estimated, confirmed, withdrawn]
+        preFixCaseVolume:
+          type: integer
+        postFixCaseVolume:
+          type: integer
+        measurementWeeks:
+          type: integer
+        monetisedValue:
+          $ref: "#/components/schemas/Money"
+        verifiedByRef:
+          type: string
+    TierCapacity:
+      type: object
+      required: [tier, headcountFte, demandCases, effortHours]
+      properties:
+        tier:
+          type: string
+          enum: [automated, tier_one, tier_two, specialist, business_partner, centre_of_excellence]
+        headcountFte:
+          type: number
+          format: float
+        demandCases:
+          type: integer
+        effortHours:
+          type: number
+          format: double
+        utilisation:
+          type: number
+          format: float
+        spanOfControl:
+          type: number
+          format: float
+    HRCapacityPlan:
+      type: object
+      required: [period, tiers, advisoryShare, advisoryShareTarget]
+      properties:
+        period:
+          type: string
+        tiers:
+          type: array
+          items:
+            $ref: "#/components/schemas/TierCapacity"
+        advisoryShare:
+          type: number
+          format: float
+        advisoryShareTarget:
+          type: number
+          format: float
+        transactionalShare:
+          type: number
+          format: float
+        informalDemandCaptureRate:
+          type: number
+          format: float
+          description: Share of true demand logged as cases rather than absorbed informally
+        skillGaps:
+          type: array
+          items:
+            type: string
+        publishedByRef:
+          type: string
+    HRCapacityPlanCreate:
+      type: object
+      required: [period, tiers, advisoryShareTarget]
+      properties:
+        period:
+          type: string
+        tiers:
+          type: array
+          items:
+            $ref: "#/components/schemas/TierCapacity"
+        advisoryShareTarget:
+          type: number
+          format: float
+        skillGaps:
+          type: array
+          items:
+            type: string
+    ConsultationRecordCreate:
+      type: object
+      required: [jurisdiction, subject, representationBody]
+      properties:
+        jurisdiction:
+          type: string
+        subject:
+          type: string
+          enum: [bot_introduction, automated_routing, case_analytics, monitoring_change, service_model_change]
+        representationBody:
+          type: string
+        plannedGoLiveOn:
+          type: string
+          format: date
+        materialsSummary:
+          type: string
+    ConsultationRecord:
+      type: object
+      required: [id, jurisdiction, subject, status]
+      properties:
+        id:
+          type: string
+        jurisdiction:
+          type: string
+        subject:
+          type: string
+        representationBody:
+          type: string
+        status:
+          type: string
+          enum: [raised, in_progress, discharged, disputed]
+        raisedOn:
+          type: string
+          format: date
+        dischargedOn:
+          type: string
+          format: date
+        blocksGoLive:
+          type: boolean
+    TransparencyNotice:
+      type: object
+      required: [audience, summary, effectiveFrom]
+      properties:
+        audience:
+          type: string
+          enum: [all_employees, managers, jurisdiction_population, contingent_workers]
+        summary:
+          type: string
+        automationDescribed:
+          type: array
+          items:
+            type: string
+        effectiveFrom:
+          type: string
+          format: date
+    RetentionSchedule:
+      type: object
+      required: [code, sensitivity, jurisdiction, retentionMonths]
+      properties:
+        code:
+          type: string
+        sensitivity:
+          $ref: "#/components/schemas/SensitivityClass"
+        jurisdiction:
+          type: string
+        retentionMonths:
+          type: integer
+        segregatedStore:
+          type: boolean
+        excludedFromAnalytics:
+          type: boolean
+    ContingentServiceScope:
+      type: object
+      required: [vendorRef, jurisdiction, permittedCategories, classification]
+      properties:
+        vendorRef:
+          type: string
+        jurisdiction:
+          type: string
+        permittedCategories:
+          type: array
+          items:
+            type: string
+        prohibitedCategories:
+          type: array
+          items:
+            type: string
+        classification:
+          type: string
+          enum: [self_employed, agency_worker, employee_of_vendor, unresolved]
+        coEmploymentRisk:
+          type: string
+          enum: [low, medium, high]
+        assessedByRef:
+          type: string
+        assessedOn:
+          type: string
+          format: date
+    ServicePerformance:
+      type: object
+      required: [period, casesCreated]
+      properties:
+        period:
+          type: string
+        casesCreated:
+          type: integer
+        casesByChannel:
+          type: object
+          additionalProperties:
+            type: integer
+        firstContactResolutionRate:
+          type: number
+          format: float
+        automationShare:
+          type: number
+          format: float
+        reopenRate:
+          type: number
+          format: float
+        serviceStandardMetRate:
+          type: number
+          format: float
+        protectedCaseCount:
+          type: integer
+        protectedCaseSatisfactionMean:
+          type: number
+          format: float
+        hrCostPerEmployee:
+          $ref: "#/components/schemas/Money"
+        staleContentServedCount:
+          type: integer
+    ProductivityStatement:
+      type: object
+      required: [period, returnedHoursConfirmed, frictionClosed]
+      properties:
+        period:
+          type: string
+        returnedHoursConfirmed:
+          $ref: "#/components/schemas/Hours"
+        returnedHoursEstimated:
+          $ref: "#/components/schemas/Hours"
+        frictionClosed:
+          type: integer
+        frictionOpenWithOwner:
+          type: integer
+        frictionOpenWithoutOwner:
+          type: integer
+        advisoryShare:
+          type: number
+          format: float
+        advisoryShareChange:
+          type: number
+          format: float
+        hrCostPerEmployee:
+          $ref: "#/components/schemas/Money"
+        issuedOn:
+          type: string
+          format: date
+        issuedByRef:
+          type: string
+    DataEnvelopeServiceCase:
+      type: object
+      required: [data, meta]
+      properties:
+        data:
+          $ref: "#/components/schemas/ServiceCase"
+        meta:
+          $ref: "#/components/schemas/ResponseMeta"
+    DataEnvelopeKnowledgeArticle:
+      type: object
+      required: [data, meta]
+      properties:
+        data:
+          $ref: "#/components/schemas/KnowledgeArticle"
+        meta:
+          $ref: "#/components/schemas/ResponseMeta"
+    DataEnvelopeAutomatedResponseEvent:
+      type: object
+      required: [data, meta]
+      properties:
+        data:
+          $ref: "#/components/schemas/AutomatedResponseEvent"
+        meta:
+          $ref: "#/components/schemas/ResponseMeta"
+    DataEnvelopeQualityGate:
+      type: object
+      required: [data, meta]
+      properties:
+        data:
+          $ref: "#/components/schemas/QualityGate"
+        meta:
+          $ref: "#/components/schemas/ResponseMeta"
+    DataEnvelopeFrictionItem:
+      type: object
+      required: [data, meta]
+      properties:
+        data:
+          $ref: "#/components/schemas/FrictionItem"
+        meta:
+          $ref: "#/components/schemas/ResponseMeta"
+    DataEnvelopeReturnedHoursRecord:
+      type: object
+      required: [data, meta]
+      properties:
+        data:
+          $ref: "#/components/schemas/ReturnedHoursRecord"
+        meta:
+          $ref: "#/components/schemas/ResponseMeta"
+    DataEnvelopeHRCapacityPlan:
+      type: object
+      required: [data, meta]
+      properties:
+        data:
+          $ref: "#/components/schemas/HRCapacityPlan"
+        meta:
+          $ref: "#/components/schemas/ResponseMeta"
+    DataEnvelopeConsultationRecord:
+      type: object
+      required: [data, meta]
+      properties:
+        data:
+          $ref: "#/components/schemas/ConsultationRecord"
+        meta:
+          $ref: "#/components/schemas/ResponseMeta"
+    DataEnvelopeContingentServiceScope:
+      type: object
+      required: [data, meta]
+      properties:
+        data:
+          $ref: "#/components/schemas/ContingentServiceScope"
+        meta:
+          $ref: "#/components/schemas/ResponseMeta"
+    DataEnvelopeServicePerformance:
+      type: object
+      required: [data, meta]
+      properties:
+        data:
+          $ref: "#/components/schemas/ServicePerformance"
+        meta:
+          $ref: "#/components/schemas/ResponseMeta"
+    DataEnvelopeProductivityStatement:
+      type: object
+      required: [data, meta]
+      properties:
+        data:
+          $ref: "#/components/schemas/ProductivityStatement"
+        meta:
+          $ref: "#/components/schemas/ResponseMeta"
+    ListEnvelopeServiceCase:
+      type: object
+      required: [data, meta]
+      properties:
+        data:
+          type: object
+          required: [items]
+          properties:
+            items:
+              type: array
+              items:
+                $ref: "#/components/schemas/ServiceCase"
+            nextCursor:
+              type: string
+        meta:
+          $ref: "#/components/schemas/ResponseMeta"
+    ListEnvelopeKnowledgeArticle:
+      type: object
+      required: [data, meta]
+      properties:
+        data:
+          type: object
+          required: [items]
+          properties:
+            items:
+              type: array
+              items:
+                $ref: "#/components/schemas/KnowledgeArticle"
+            nextCursor:
+              type: string
+        meta:
+          $ref: "#/components/schemas/ResponseMeta"
+    ListEnvelopeFrictionItem:
+      type: object
+      required: [data, meta]
+      properties:
+        data:
+          type: object
+          required: [items]
+          properties:
+            items:
+              type: array
+              items:
+                $ref: "#/components/schemas/FrictionItem"
+            nextCursor:
+              type: string
+        meta:
+          $ref: "#/components/schemas/ResponseMeta"
+    ListEnvelopeReturnedHoursRecord:
+      type: object
+      required: [data, meta]
+      properties:
+        data:
+          type: object
+          required: [items]
+          properties:
+            items:
+              type: array
+              items:
+                $ref: "#/components/schemas/ReturnedHoursRecord"
+            nextCursor:
+              type: string
+        meta:
+          $ref: "#/components/schemas/ResponseMeta"
